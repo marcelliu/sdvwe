@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>otkrovenno.online — креативи UA</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0E0F14; color: #F2F2F5; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 24px; border-bottom: 1px solid #272A37; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .tabs button { background: #20232E; color: #F2F2F5; border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer; font-weight: 600; }
+  .tabs button.on { background: linear-gradient(90deg, #FF4B2B, #FF3D7F); }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; padding: 24px; }
+  figure { margin: 0; background: #171922; border-radius: 16px; padding: 10px; }
+  video { width: 100%; border-radius: 10px; background: #000; display: block; }
+  figcaption { padding: 8px 4px 2px; font-weight: 600; }
+  figcaption small { display: block; color: #9A9DAF; font-weight: 400; }
+  .hint { color: #9A9DAF; }
+</style>
+</head>
+<body>
+<header>
+  <h1>otkrovenno.online — 5 креативів (UA)</h1>
+  <div class="tabs"><button data-f="9x16" class="on">TikTok 9:16</button> <button data-f="3x4">Instagram 3:4</button></div>
+  <span class="hint">Відкрийте цей файл з розпакованого архіву — відео підтягуються з папки renders/</span>
+</header>
+<main id="grid"></main>
+<script>
+  const creos = [
+    ['01_2347', '«23:47»', 'нічний POV · 24 с'],
+    ['02_3_kroky', '«3 кроки»', 'UI-демо · 22 с'],
+    ['03_toi_samyi_vechir', '«Той самий вечір»', 'спліт А/Б · 24 с'],
+    ['04_dumav_shcho_pizno', '«Думав, що вже пізно»', 'історія · 26 с'],
+    ['05_shcho_vin_khoche_pochuty', '«Що він хоче почути?»', 'квіз · 22 с'],
+  ];
+  function show(f) {
+    document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.f === f));
+    document.getElementById('grid').innerHTML = creos.map(([slug, title, sub]) =>
+      `<figure><video src="renders/${f}/${slug}_${f}.mp4" controls playsinline preload="metadata"></video>
+       <figcaption>${title}<small>${sub} · ${f === '9x16' ? '1080×1920' : '1080×1440'}</small></figcaption></figure>`).join('');
+  }
+  document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => show(b.dataset.f)));
+  show('9x16');
+</script>
+</body>
+</html>
