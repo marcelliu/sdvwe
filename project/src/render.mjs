@@ -90,13 +90,18 @@ function encoder(out, W, H, codecArgs) {
     },
   };
 }
-const X264 = (crf) => [
+const X264 = (crf, preset = 'medium', maxrate = '14M') => [
   '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p',
-  '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-profile:v', 'high', '-level', '4.2', '-g', '60', '-threads', '2',
+  '-c:v', 'libx264', '-preset', preset, '-crf', String(crf), '-maxrate', maxrate, '-bufsize', '28M', '-profile:v', 'high', '-level', '4.2', '-g', '60', '-threads', '2',
   '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv', '-movflags', '+faststart',
 ];
 // Skia pixels are premultiplied; ProRes 4444 alpha is straight -> unpremultiply before encoding.
 const PRORES = ['-vf', 'format=gbrap,unpremultiply=inplace=1', '-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16', '-vendor', 'apl0', '-qscale:v', '11'];
+// Default overlay: VP9 WebM with alpha (~1/40 of ProRes size). Use --prores for MOV ProRes 4444.
+const VP9A = ['-vf', 'format=gbrap,unpremultiply=inplace=1,format=yuva420p', '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '24', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-threads', '2', '-auto-alt-ref', '0', '-g', '60'];
+const useProres = !!arg('prores');
+const noAudio = !!arg('no-audio');
+const pngLayers = !!arg('png-layers');
 
 // NB: ctx.getImageData() leaks native memory in @napi-rs/canvas (~8 MB per call); canvas.data() does not.
 const pix = (canvas) => canvas.data();
@@ -121,6 +126,11 @@ async function renderStills(creo, geom) {
     finC.drawImage(fg, 0, 0);
     const png = fin.toBuffer('image/png');
     fs.writeFileSync(path.join(dir, `${creo.slug}_${geom.fmt}_${t.toFixed(2)}.png`), png);
+    if (pngLayers) {
+      // transparent text/UI layer of this moment (for rebuilding in CapCut / Premiere)
+      const ld = mk('build', 'layers_png', geom.fmt);
+      fs.writeFileSync(path.join(ld, `${creo.slug}_${geom.fmt}_t${t.toFixed(2)}_overlay.png`), fg.toBuffer('image/png'));
+    }
     const cx = 8 + (i % cols) * (tw + 8), cy = 8 + Math.floor(i / cols) * (th + 44);
     // decode the PNG instead of drawing the live canvas (avoids lazy canvas snapshots in the sheet)
     sc.drawImage(await loadImage(png), cx, cy, tw, th);
@@ -142,9 +152,13 @@ async function renderVideo(creo, geom) {
   const bg = createCanvas(W, H), fg = createCanvas(W, H), fin = createCanvas(W, H);
   const bgC = bg.getContext('2d'), fgC = fg.getContext('2d'), finC = fin.getContext('2d');
   const base = `${creo.slug}_${geom.fmt}`;
-  const encFinal = encoder(path.join(mk('build', 'tmp'), `${base}_v.mp4`), W, H, X264(16));
-  const encBg = doBg ? encoder(path.join(mk('build', 'backgrounds', geom.fmt), `${base}_bg.mp4`), W, H, X264(19)) : null;
-  const encFg = doLayers ? encoder(path.join(mk('build', 'layers', geom.fmt), `${base}_overlay.mov`), W, H, PRORES) : null;
+  const encFinal = encoder(path.join(mk('build', 'tmp'), `${base}_v.mp4`), W, H, X264(18));
+  const encBg = doBg ? encoder(path.join(mk('build', 'backgrounds', geom.fmt), `${base}_bg.mp4`), W, H, X264(21, 'fast', '10M')) : null;
+  const encFg = doLayers
+    ? useProres
+      ? encoder(path.join(mk('build', 'layers', geom.fmt), `${base}_overlay_prores4444.mov`), W, H, PRORES)
+      : encoder(path.join(mk('build', 'layers', geom.fmt), `${base}_overlay_alpha.webm`), W, H, VP9A)
+    : null;
   const N = Math.min(maxFrames, Math.round(creo.duration * FPS));
   const t0 = Date.now();
   for (let i = 0; i < N; i++) {
@@ -218,7 +232,7 @@ for (const creo of list) {
     if (stills) await renderStills(creo, geom);
     else if (!audioOnly) await renderVideo(creo, geom);
   }
-  if (!stills) {
+  if (!stills && !noAudio) {
     const haveAudio = fs.existsSync(P('src', 'audio', 'mixer.mjs')) && fs.existsSync(AUDIO('manifest.json'));
     if (!haveAudio) {
       console.log('audio not built yet — run `npm run audio` then `node src/render.mjs --audio-only`');

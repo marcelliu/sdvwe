@@ -100,7 +100,10 @@ function noiseTiles() {
 }
 
 /** Film grain (overlay blend), changes every frame. */
+// Global grain scale: grain is costly in bitrate, keep it subtle (TikTok re-encodes anyway).
+export const GRAIN_SCALE = 0.6;
 export function grain(ctx, W, H, t, amount = 0.07) {
+  amount *= GRAIN_SCALE;
   if (amount <= 0) return;
   const tiles = noiseTiles();
   const f = Math.floor(t * 30);
