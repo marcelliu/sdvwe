@@ -1,0 +1,15 @@
+{
+  "name": "otkrovenno-creo-ua",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "5 UA video creatives (TikTok 9:16 + Instagram 3:4): render project",
+  "scripts": {
+    "audio": "node src/audio/build.mjs",
+    "render": "node src/render.mjs",
+    "preview": "node src/preview-server.mjs"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.80"
+  }
+}
