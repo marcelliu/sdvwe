@@ -137,27 +137,30 @@ export function softClip(chs, t = 0.7) {
   return chs;
 }
 
-// ---- true-peak estimation (4x oversampling, 12-tap Blackman-windowed sinc per phase) ----
+// ---- true-peak estimation (4x oversampling, 32-tap Kaiser-windowed sinc per phase) ----
+const TP_TAPS = 32, TP_H = 16;
+function bessel0(x) { let s = 1, t = 1; for (let k = 1; k < 30; k++) { t *= (x / (2 * k)) ** 2; s += t; } return s; }
 const TPK = [0.25, 0.5, 0.75].map((mu) => {
-  const k = new Float64Array(12); let s = 0;
-  for (let j = 0; j < 12; j++) {
-    const x = j - 5 - mu, sinc = Math.abs(x) < 1e-9 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
-    const w = 0.42 + 0.5 * Math.cos(Math.PI * x / 6.5) + 0.08 * Math.cos(2 * Math.PI * x / 6.5);
+  const k = new Float64Array(TP_TAPS); let s = 0;
+  for (let j = 0; j < TP_TAPS; j++) {
+    const x = j - (TP_H - 1) - mu, sinc = Math.abs(x) < 1e-9 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
+    const r = x / (TP_H + 0.5), w = Math.abs(r) >= 1 ? 0 : bessel0(8 * Math.sqrt(1 - r * r)) / bessel0(8);
     k[j] = sinc * w; s += k[j];
   }
-  for (let j = 0; j < 12; j++) k[j] /= s;
+  for (let j = 0; j < TP_TAPS; j++) k[j] /= s;
   return k;
 });
 /** Per-sample peak detector including inter-sample estimates (only computed where |x| > floor). */
 export function tpDetect(x, floor = 0) {
   const n = x.length, d = new Float32Array(n);
   for (let i = 0; i < n; i++) d[i] = Math.abs(x[i]);
-  for (let i = 5; i < n - 7; i++) {
+  for (let i = TP_H - 1; i < n - TP_H - 1; i++) {
     if (d[i] < floor && d[i + 1] < floor) continue;
     let m = 0;
+    const o = i - (TP_H - 1);
     for (let p = 0; p < 3; p++) {
       const k = TPK[p]; let s = 0;
-      for (let j = 0; j < 12; j++) s += k[j] * x[i - 5 + j];
+      for (let j = 0; j < TP_TAPS; j++) s += k[j] * x[o + j];
       const a = Math.abs(s); if (a > m) m = a;
     }
     if (m > d[i]) d[i] = m;
@@ -180,7 +183,7 @@ export function limiter(chs, { ceilingDb = -1, lookaheadMs = 1.5, releaseMs = 80
   const n = chs[0].length, ceil = db(ceilingDb);
   const req = new Float32Array(n).fill(1);
   for (const c of chs) {
-    const d = tp ? tpDetect(c, ceil * 0.6) : c.map(Math.abs);
+    const d = tp ? tpDetect(c, ceil * 0.7) : c.map(Math.abs);
     for (let i = 0; i < n; i++) if (d[i] > ceil) { const r = ceil / d[i]; if (r < req[i]) req[i] = r; }
   }
   const L = Math.max(1, Math.round(lookaheadMs * SR / 1000));
@@ -189,9 +192,10 @@ export function limiter(chs, { ceilingDb = -1, lookaheadMs = 1.5, releaseMs = 80
   let g = 1;
   for (let i = 0; i < n; i++) { g = 1 - (1 - g) * rc; if (h[i] < g) g = h[i]; h[i] = g; }
   let acc = 0;
+  const h0 = h[0]; // pre-roll uses h[0] so peaks inside the first lookahead window are still caught
   for (let i = 0; i < n; i++) {
     acc += h[i]; if (i >= L) acc -= h[i - L];
-    const gain = (acc + (i < L - 1 ? L - 1 - i : 0)) / L;
+    const gain = (acc + (i < L - 1 ? (L - 1 - i) * h0 : 0)) / L;
     for (const c of chs) c[i] *= gain;
   }
   return chs;
