@@ -189,9 +189,10 @@ export function limiter(chs, { ceilingDb = -1, lookaheadMs = 1.5, releaseMs = 80
   let g = 1;
   for (let i = 0; i < n; i++) { g = 1 - (1 - g) * rc; if (h[i] < g) g = h[i]; h[i] = g; }
   let acc = 0;
+  const h0 = h[0]; // pre-roll uses h[0] so peaks inside the first lookahead window are still caught
   for (let i = 0; i < n; i++) {
     acc += h[i]; if (i >= L) acc -= h[i - L];
-    const gain = (acc + (i < L - 1 ? L - 1 - i : 0)) / L;
+    const gain = (acc + (i < L - 1 ? (L - 1 - i) * h0 : 0)) / L;
     for (const c of chs) c[i] *= gain;
   }
   return chs;
